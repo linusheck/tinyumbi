@@ -1,0 +1,83 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run ruff check src tests evaluation
+      - name: Run tests
+        run: uv run pytest tests -ra
+
+  observatory:
+    name: Full observatory tests and benchmarks
+    runs-on: ubuntu-latest
+    container: ghcr.io/pmc-tools/umb-observatory:main
+    env:
+      UMB_STORM: /usr/local/bin/storm
+      UMB_PRISM: /opt/prism
+      UMB_TEST_MODELS: full
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: pmc-tools/umb-observatory
+          ref: aa5b91072056cfdee89084ea8284dc458802bf01
+          path: observatory-src
+      - uses: actions/checkout@v4
+        with:
+          repository: pmc-tools/umb-benchmarks
+          ref: e82a195ec4dbacb50f687f491f5c4a16d491ddf4
+          path: benchmark-src
+          sparse-checkout: 2026-04-15/models
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Run all tests with the full model corpus
+        run: >-
+          uv run pytest tests
+          --observatory observatory-src --require-observatory-tools
+          --junitxml=observatory-results.xml -ra
+          --benchmark-json=observatory-benchmarks.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observatory-results
+          path: |
+            observatory-results.xml
+            observatory-benchmarks.json
+
+      - name: Run paper benchmarks
+        if: ${{ !cancelled() }}
+        run: >-
+          uv run pytest tests/test_observatory.py
+          --observatory observatory-src --require-observatory-tools
+          --benchmark-models benchmark-src/2026-04-15/models
+          --benchmark-timeout 120 --benchmark-memory-mib 4096
+          --benchmark-json=paper-benchmarks.json
+          --junitxml=paper-results.xml -ra
+      - name: Plot paper benchmarks
+        if: ${{ !cancelled() && hashFiles('paper-benchmarks.json') != '' }}
+        run: >-
+          uv run --with matplotlib python -m evaluation.plot
+          paper-benchmarks.json --output reader-scatter.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-benchmarks
+          path: |
+            paper-results.xml
+            paper-benchmarks.json
+            reader-scatter.png
+            reader-scatter.svg

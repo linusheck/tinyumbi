@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tinyumbi"
+version = "0.1.0"
+description = "A compact, read-only, memory-mapped UMB 1.0 parser"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["numpy>=2.0", "bitarray>=3.0", "orjson>=3.10"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.11", "umbi>=0.2.12"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["observatory: interoperability tests requiring an umb-observatory checkout and exporters"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
