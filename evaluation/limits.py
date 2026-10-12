@@ -3,9 +3,11 @@
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -18,7 +20,24 @@ class LimitedRun:
     limit: str | None
 
 
+def _linux_group_rss_kib(pgid, proc=Path("/proc")):
+    page_kib = os.sysconf("SC_PAGE_SIZE") // 1024
+    rss_kib = 0
+    for stat in proc.glob("[0-9]*/stat"):
+        try:
+            # comm is parenthesized and may itself contain spaces or ')'.
+            fields = stat.read_text().rsplit(")", 1)[1].split()
+            if int(fields[2]) == pgid:
+                rss_kib += int(fields[21]) * page_kib
+        except (OSError, IndexError, ValueError):
+            # Processes can exit while the snapshot is being collected.
+            continue
+    return rss_kib
+
+
 def _group_rss_kib(pgid):
+    if sys.platform == "linux":
+        return _linux_group_rss_kib(pgid)
     snapshot = subprocess.run(
         ["ps", "-axo", "pgid=,rss="], capture_output=True, text=True, check=True, timeout=5
     )
